@@ -700,4 +700,4 @@ export default function TheRack() {
       </div>
     </div>
   );
-}
+} 
