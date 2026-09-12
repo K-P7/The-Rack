@@ -41,6 +41,9 @@ const CATEGORY_META = {
   bottom: { label: "Bottoms" },
   dress: { label: "Dresses" },
   shoes: { label: "Shoes" },
+  wristwatches: { label: "Wristwatches" },
+  earrings: {label: "Earrings" },
+  other accessories: {label: "Other-accessories" },
 };
 
 const STARTER_ITEMS = [
