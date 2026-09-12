@@ -37,18 +37,20 @@ const COLORS = [
 const STYLES = ["Casual", "Smart-casual", "Formal", "Sporty"];
 
 const CATEGORY_META = {
-  top: { label: "Tops", plural: "tops" },
-  bottom: { label: "Bottoms", plural: "bottoms" },
-  shoes: { label: "Shoes", plural: "shoes" },
+  top: { label: "Tops" },
+  bottom: { label: "Bottoms" },
+  dress: { label: "Dresses" },
+  shoes: { label: "Shoes" },
 };
 
 const STARTER_ITEMS = [
-  { id: "s1", category: "top", name: "White Oxford Shirt", color: "White", style: "Smart-casual" },
-  { id: "s2", category: "top", name: "Grey T-Shirt", color: "Grey", style: "Casual" },
-  { id: "s3", category: "bottom", name: "Navy Chinos", color: "Navy", style: "Smart-casual" },
-  { id: "s4", category: "bottom", name: "Black Denim", color: "Black", style: "Casual" },
-  { id: "s5", category: "shoes", name: "Tan Loafers", color: "Tan", style: "Smart-casual" },
-  { id: "s6", category: "shoes", name: "White Sneakers", color: "White", style: "Casual" },
+  { id: "s1", category: "top", name: "White Oxford Shirt", color: "White", style: "Smart-casual", image: null },
+  { id: "s2", category: "top", name: "Grey T-Shirt", color: "Grey", style: "Casual", image: null },
+  { id: "s3", category: "bottom", name: "Navy Chinos", color: "Navy", style: "Smart-casual", image: null },
+  { id: "s4", category: "bottom", name: "Black Denim", color: "Black", style: "Casual", image: null },
+  { id: "s5", category: "dress", name: "Navy Wrap Dress", color: "Navy", style: "Smart-casual", image: null },
+  { id: "s6", category: "shoes", name: "Tan Loafers", color: "Tan", style: "Smart-casual", image: null },
+  { id: "s7", category: "shoes", name: "White Sneakers", color: "White", style: "Casual", image: null },
 ];
 
 // ---- Matching logic ----------------------------------------------------
@@ -102,12 +104,15 @@ function colorScore(colors) {
   return { score, note };
 }
 
+// Builds both separate (top+bottom+shoe) and dress (dress+shoe) outfits
 function buildOutfits(items) {
   const tops = items.filter((i) => i.category === "top");
   const bottoms = items.filter((i) => i.category === "bottom");
+  const dresses = items.filter((i) => i.category === "dress");
   const shoes = items.filter((i) => i.category === "shoes");
 
   const outfits = [];
+
   for (const top of tops) {
     for (const bottom of bottoms) {
       for (const shoe of shoes) {
@@ -116,15 +121,28 @@ function buildOutfits(items) {
         const s = styleScore(styles);
         const c = colorScore(colors);
         outfits.push({
-          top,
-          bottom,
-          shoe,
+          pieces: [top, bottom, shoe],
           score: s.score + c.score,
           notes: [c.note, s.note],
         });
       }
     }
   }
+
+  for (const dress of dresses) {
+    for (const shoe of shoes) {
+      const styles = [dress.style, shoe.style];
+      const colors = [dress.color, shoe.color];
+      const s = styleScore(styles);
+      const c = colorScore(colors);
+      outfits.push({
+        pieces: [dress, shoe],
+        score: s.score + c.score,
+        notes: [c.note, s.note],
+      });
+    }
+  }
+
   return outfits.sort((a, b) => b.score - a.score);
 }
 
@@ -146,6 +164,25 @@ function Swatch({ color, size = 14 }) {
   );
 }
 
+function Thumb({ item, size = 36 }) {
+  if (item.image) {
+    return (
+      <img
+        src={item.image}
+        alt={item.name}
+        style={{
+          width: size,
+          height: size,
+          objectFit: "cover",
+          borderRadius: 4,
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+  return <Swatch color={item.color} size={size === 36 ? 18 : 14} />;
+}
+
 function ItemCard({ item, onRemove }) {
   return (
     <div
@@ -157,10 +194,9 @@ function ItemCard({ item, onRemove }) {
         display: "flex",
         alignItems: "center",
         gap: 10,
-        position: "relative",
       }}
     >
-      <Swatch color={item.color} size={18} />
+      <Thumb item={item} size={36} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
@@ -199,7 +235,7 @@ function ItemCard({ item, onRemove }) {
 }
 
 function OutfitCard({ outfit, rank }) {
-  const { top, bottom, shoe, notes } = outfit;
+  const { pieces, notes } = outfit;
   return (
     <div
       style={{
@@ -222,14 +258,14 @@ function OutfitCard({ outfit, rank }) {
         Pairing {rank}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-        {[top, bottom, shoe].map((it) => (
+        {pieces.map((it) => (
           <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Swatch color={it.color} size={14} />
+            <Thumb item={it} size={28} />
             <span style={{ fontFamily: "'Zilla Slab', serif", fontSize: 16, fontWeight: 600 }}>
               {it.name}
             </span>
             <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: "#9db0c2" }}>
-              {it.category === "top" ? "top" : it.category === "bottom" ? "bottom" : "shoes"}
+              {CATEGORY_META[it.category].label.toLowerCase()}
             </span>
           </div>
         ))}
@@ -249,15 +285,128 @@ function OutfitCard({ outfit, rank }) {
   );
 }
 
+function ProfileCard({ profile, onSave }) {
+  const [name, setName] = useState(profile?.name || "");
+  const [email, setEmail] = useState(profile?.email || "");
+  const [editing, setEditing] = useState(!profile);
+  const [error, setError] = useState("");
+
+  function handleSave(e) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) {
+      setError("Enter both name and email");
+      return;
+    }
+    setError("");
+    onSave({ name: name.trim(), email: email.trim() });
+    setEditing(false);
+  }
+
+  if (!editing && profile) {
+    return (
+      <div
+        style={{
+          background: "#152130",
+          border: "1px solid #253345",
+          borderRadius: 6,
+          padding: "12px 16px",
+          marginBottom: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <div style={{ fontFamily: "'Zilla Slab', serif", fontWeight: 600, color: "#F3EFE6", fontSize: 15 }}>
+            {profile.name}
+          </div>
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: "#8fa0af" }}>
+            {profile.email}
+          </div>
+        </div>
+        <button
+          onClick={() => setEditing(true)}
+          style={{ background: "none", border: "1px solid #2c4056", color: "#c7d2dc", borderRadius: 4, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}
+        >
+          Edit
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSave}
+      style={{
+        background: "#152130",
+        border: "1px solid #253345",
+        borderRadius: 6,
+        padding: 16,
+        marginBottom: 20,
+      }}
+    >
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Your name"
+          style={{
+            flex: "1 1 140px",
+            padding: "8px 10px",
+            borderRadius: 4,
+            border: "1px solid #2c4056",
+            background: "#0F1720",
+            color: "#F3EFE6",
+            fontSize: 13,
+          }}
+        />
+        <input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Your email"
+          type="email"
+          style={{
+            flex: "1 1 140px",
+            padding: "8px 10px",
+            borderRadius: 4,
+            border: "1px solid #2c4056",
+            background: "#0F1720",
+            color: "#F3EFE6",
+            fontSize: 13,
+          }}
+        />
+      </div>
+      {error && <div style={{ color: "#e08a7a", fontSize: 12, marginBottom: 8 }}>{error}</div>}
+      <button
+        type="submit"
+        style={{
+          padding: "8px 16px",
+          borderRadius: 4,
+          border: "none",
+          background: "#C9A15A",
+          color: "#1B2A38",
+          fontWeight: 600,
+          fontSize: 13,
+          cursor: "pointer",
+        }}
+      >
+        Save profile
+      </button>
+    </form>
+  );
+}
+
 // ---- Main app -----------------------------------------------------
 
 export default function TheRack() {
   useFonts();
+  const [profile, setProfile] = useState(null);
   const [items, setItems] = useState(STARTER_ITEMS);
   const [category, setCategory] = useState("top");
   const [name, setName] = useState("");
   const [color, setColor] = useState(COLORS[0].name);
   const [style, setStyle] = useState(STYLES[0]);
+  const [image, setImage] = useState(null);
   const [showOutfits, setShowOutfits] = useState(false);
 
   const outfits = useMemo(() => buildOutfits(items), [items]);
@@ -266,18 +415,28 @@ export default function TheRack() {
   const counts = {
     top: items.filter((i) => i.category === "top").length,
     bottom: items.filter((i) => i.category === "bottom").length,
+    dress: items.filter((i) => i.category === "dress").length,
     shoes: items.filter((i) => i.category === "shoes").length,
   };
-  const canSuggest = counts.top > 0 && counts.bottom > 0 && counts.shoes > 0;
+  const canSuggest = counts.shoes > 0 && (counts.dress > 0 || (counts.top > 0 && counts.bottom > 0));
+
+  function handleImageChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImage(reader.result);
+    reader.readAsDataURL(file);
+  }
 
   function addItem(e) {
     e.preventDefault();
     if (!name.trim()) return;
     setItems((prev) => [
       ...prev,
-      { id: `${Date.now()}`, category, name: name.trim(), color, style },
+      { id: `${Date.now()}`, category, name: name.trim(), color, style, image },
     ]);
     setName("");
+    setImage(null);
     setShowOutfits(false);
   }
 
@@ -296,7 +455,7 @@ export default function TheRack() {
       }}
     >
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        <header style={{ marginBottom: 28 }}>
+        <header style={{ marginBottom: 20 }}>
           <h1
             style={{
               fontFamily: "'Zilla Slab', serif",
@@ -312,6 +471,8 @@ export default function TheRack() {
             Log what's in your closet. Get outfit pairings that actually work together.
           </p>
         </header>
+
+        <ProfileCard profile={profile} onSave={setProfile} />
 
         <form
           onSubmit={addItem}
@@ -350,11 +511,10 @@ export default function TheRack() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={
-              category === "top"
-                ? "e.g. Blue linen shirt"
-                : category === "bottom"
-                ? "e.g. Khaki trousers"
-                : "e.g. Brown derby shoes"
+              category === "top" ? "e.g. Blue linen shirt" :
+              category === "bottom" ? "e.g. Khaki trousers" :
+              category === "dress" ? "e.g. Green midi dress" :
+              "e.g. Brown derby shoes"
             }
             style={{
               width: "100%",
@@ -370,7 +530,7 @@ export default function TheRack() {
             }}
           />
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
             <select
               value={color}
               onChange={(e) => setColor(e.target.value)}
@@ -412,6 +572,36 @@ export default function TheRack() {
               ))}
             </select>
           </div>
+
+          <label
+            style={{
+              display: "block",
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 12,
+              color: "#8fa0af",
+              marginBottom: 6,
+            }}
+          >
+            Photo (optional)
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            style={{
+              width: "100%",
+              marginBottom: 12,
+              fontSize: 12,
+              color: "#c7d2dc",
+            }}
+          />
+          {image && (
+            <img
+              src={image}
+              alt="Preview"
+              style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 4, marginBottom: 12 }}
+            />
+          )}
 
           <button
             type="submit"
@@ -484,7 +674,7 @@ export default function TheRack() {
         </button>
         {!canSuggest && (
           <p style={{ marginTop: -16, marginBottom: 24, fontSize: 12, color: "#546374" }}>
-            Add at least one top, one bottom, and one pair of shoes to get suggestions.
+            Add shoes plus either a dress, or a top and a bottom.
           </p>
         )}
 
@@ -502,7 +692,7 @@ export default function TheRack() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {topOutfits.map((o, idx) => (
-                <OutfitCard key={`${o.top.id}-${o.bottom.id}-${o.shoe.id}`} outfit={o} rank={idx + 1} />
+                <OutfitCard key={o.pieces.map((p) => p.id).join("-")} outfit={o} rank={idx + 1} />
               ))}
             </div>
           </div>
